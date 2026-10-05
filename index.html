@@ -129,8 +129,12 @@
         body: JSON.stringify(Object.assign({ action }, payload)),
       });
     } catch (e) { throw new Error('連線失敗，請檢查網路後再試'); }
+    const text = await res.text();
     let json;
-    try { json = await res.json(); } catch (e) { throw new Error('伺服器回應異常，請確認部署設定'); }
+    try { json = JSON.parse(text); } catch (e) {
+      const msg = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('伺服器回應異常（HTTP ' + res.status + '）：' + (msg || '空白回應'));
+    }
     if (!json.ok) throw new Error(String(json.error || '發生錯誤').replace(/^Error:\s*/, ''));
     return json.result;
   }

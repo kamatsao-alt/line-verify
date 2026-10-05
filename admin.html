@@ -157,8 +157,12 @@
         body: JSON.stringify(Object.assign({ action }, payload)),
       });
     } catch (e) { throw new Error('連線失敗，請檢查網路後再試'); }
+    const text = await res.text();
     let json;
-    try { json = await res.json(); } catch (e) { throw new Error('伺服器回應異常，請確認部署設定'); }
+    try { json = JSON.parse(text); } catch (e) {
+      const msg = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw new Error('伺服器回應異常（HTTP ' + res.status + '）：' + (msg || '空白回應'));
+    }
     if (!json.ok) throw new Error(String(json.error || '發生錯誤').replace(/^Error:\s*/, ''));
     return json.result;
   }
@@ -173,7 +177,7 @@
   const imgCache = {};
 
   const call = (fn, pw, ...a) => api(fn,
-    fn === 'adminImage' ? { pw, fileId: a[0] } :
+    fn === 'adminImage' ? { pw, fileId: a[0], part: a[1] } :
     fn === 'adminUpdate' ? { pw, id: a[0], status: a[1], note: a[2] } : { pw });
 
   const isExpired = r => r.status === '通過' && r.expireDate && r.expireDate < TODAY;
@@ -252,7 +256,13 @@
     if (imgCache[r.fileId]) return showImg(imgCache[r.fileId]);
     box.innerHTML = '<div class="loading">載入截圖中…</div>';
     try {
-      const data = await call('adminImage', PW, r.fileId);
+      let first = await call('adminImage', PW, r.fileId, 0), b64 = first.data;
+      for (let p = 1; p < first.total; p++) {
+        if (!current || current.id !== id) return;
+        box.innerHTML = `<div class="loading">載入截圖中… ${Math.round(p / first.total * 100)}%</div>`;
+        b64 += (await call('adminImage', PW, r.fileId, p)).data;
+      }
+      const data = `data:${first.mime};base64,${b64}`;
       imgCache[r.fileId] = data;
       if (current && current.id === id) showImg(data);
     } catch (err) { box.innerHTML = `<div class="loading">${esc(err.message)}</div>`; }
