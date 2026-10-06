@@ -45,6 +45,13 @@
   .done .ok{width:64px;height:64px;border-radius:50%;background:#e8f9ef;color:var(--brand-d);display:grid;place-items:center;margin:0 auto 12px;font-size:32px}
   .done .id{display:inline-block;font:700 28px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;background:#f1f5f9;padding:12px 20px;border-radius:10px;margin:12px 0}
   .done p{color:var(--mute);margin:6px 0}
+  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#e5e7eb;border-radius:12px;padding:4px;margin-bottom:16px}
+  .tabs button{border:0;background:none;border-radius:9px;padding:10px;font:600 15px/1.2 inherit;font-family:inherit;color:var(--mute);cursor:pointer}
+  .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .only-renew{display:none}
+  body.renew .only-renew{display:block}
+  body.renew .only-new{display:none}
+  #memberId{text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em}
   footer{text-align:center;color:#9ca3af;font-size:12px;margin-top:8px}
   @media (max-width:420px){.row{grid-template-columns:1fr;gap:0}}
 </style>
@@ -58,6 +65,16 @@
   </header>
 
   <div id="formView">
+    <div class="tabs" role="tablist">
+      <button type="button" class="on" data-mode="new">新成員申請</button>
+      <button type="button" data-mode="renew">舊成員續訂</button>
+    </div>
+
+    <div class="howto only-renew" style="background:#eef6ff">
+      <b>續訂說明</b>
+      已經是社群成員、泡泡續訂後，請輸入你的<strong>成員編號</strong>（例如 M0012）並上傳新的付費截圖。忘記編號請洽管理員。
+    </div>
+
     <div class="howto">
       <b>付費截圖怎麼準備？</b>
       <ol>
@@ -68,6 +85,11 @@
     </div>
 
     <form class="card" id="form" novalidate>
+      <div class="only-renew">
+        <label class="f" for="memberId">成員編號 <span class="req">*</span><small>管理員提供的編號</small></label>
+        <input type="text" id="memberId" maxlength="10" autocomplete="off" placeholder="例：M0012">
+      </div>
+
       <label class="f" for="name">社群名字 <span class="req">*</span><small>你在 LINE 社群中顯示的名字</small></label>
       <input type="text" id="name" maxlength="50" autocomplete="off" placeholder="例：小星星🌟" required>
 
@@ -82,9 +104,11 @@
         </div>
       </div>
 
-      <label class="f" for="joinTime">加入 LINE 社群的時間 <span class="req">*</span></label>
-      <input type="datetime-local" id="joinTime" required>
-      <div class="hint">大約時間即可，方便管理員比對社群的加入通知</div>
+      <div class="only-new">
+        <label class="f" for="joinTime">加入 LINE 社群的時間 <span class="req">*</span></label>
+        <input type="datetime-local" id="joinTime" required>
+        <div class="hint">大約時間即可，方便管理員比對社群的加入通知</div>
+      </div>
 
       <label class="f">付費截圖（含名字浮水印）<span class="req">*</span></label>
       <div class="drop" id="drop">
@@ -106,10 +130,10 @@
 
   <div class="card done" id="doneView">
     <div class="ok">✓</div>
-    <h2 style="margin:0">已收到你的驗證資料</h2>
-    <p>你的申請編號</p>
+    <h2 style="margin:0" id="doneTitle">已收到你的驗證資料</h2>
+    <p id="doneLabel">你的成員編號</p>
     <div class="id" id="doneId">—</div>
-    <p>管理員審核後會處理你的入群狀態，<br>若有問題請提供此編號給管理員。</p>
+    <p id="doneHint">請記下這個編號，之後續訂時需要用到。<br>管理員審核後會處理你的入群狀態。</p>
   </div>
 
   <footer>資料僅供社群管理員審核使用</footer>
@@ -151,6 +175,17 @@
   $('expireDate').min = todayStr;
   $('joinTime').max = `${todayStr}T23:59`;
 
+  // 新成員／續訂切換
+  let mode = 'new';
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    document.body.classList.toggle('renew', mode === 'renew');
+    $('submit').textContent = mode === 'renew' ? '送出續訂' : '送出驗證';
+    hideErr();
+  });
+  if (/[?&]renew\b/.test(location.search)) document.querySelector('[data-mode=renew]').click();
+
   // 圖片選擇與壓縮
   const drop = $('drop');
   ['dragenter','dragover'].forEach(e => drop.addEventListener(e, () => drop.classList.add('over')));
@@ -189,6 +224,8 @@
     e.preventDefault();
     hideErr();
     const d = {
+      mode,
+      memberId: $('memberId').value.trim().toUpperCase(),
       name: $('name').value.trim(),
       payDate: $('payDate').value,
       expireDate: $('expireDate').value,
@@ -196,12 +233,13 @@
       image: imageData,
       website: $('website').value,
     };
+    if (mode === 'renew' && !/^M\d{1,6}$/.test(d.memberId)) return showErr('請輸入正確的成員編號，例如 M0012', 'memberId');
     if (!d.name) return showErr('請填寫社群名字', 'name');
     if (!d.payDate) return showErr('請填寫泡泡付費日期', 'payDate');
     if (!d.expireDate) return showErr('請填寫泡泡訂閱到期日', 'expireDate');
     if (d.expireDate < d.payDate) return showErr('到期日不能早於付費日期', 'expireDate');
     if (d.expireDate < todayStr) return showErr('你的泡泡訂閱已到期，請續訂後再提交', 'expireDate');
-    if (!d.joinTime) return showErr('請填寫加入 LINE 社群的時間', 'joinTime');
+    if (mode === 'new' && !d.joinTime) return showErr('請填寫加入 LINE 社群的時間', 'joinTime');
     if (!d.image) return showErr('請上傳含名字浮水印的付費截圖');
     if (!$('agree').checked) return showErr('請勾選確認資料真實');
 
@@ -209,13 +247,18 @@
     btn.disabled = true; btn.textContent = '上傳中，請稍候…';
     api('submit', { data: d })
       .then(res => {
-        $('doneId').textContent = res.id;
+        $('doneId').textContent = mode === 'renew' ? d.memberId : res.id;
+        if (mode === 'renew') {
+          $('doneTitle').textContent = '已收到你的續訂資料';
+          $('doneLabel').textContent = '成員編號';
+          $('doneHint').innerHTML = `續訂單號 ${res.id}<br>管理員審核後會更新你的會員到期日。`;
+        }
         $('formView').style.display = 'none';
         $('doneView').style.display = 'block';
         window.scrollTo(0, 0);
       })
       .catch(err => {
-        btn.disabled = false; btn.textContent = '送出驗證';
+        btn.disabled = false; btn.textContent = mode === 'renew' ? '送出續訂' : '送出驗證';
         showErr(err.message || '送出失敗，請稍後再試');
       });
   });

@@ -29,7 +29,7 @@
   .top h1{font-size:20px;margin:0}
   .top .sub{color:var(--mute);font-size:13px}
   .ghost{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 14px;color:var(--ink)}
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
   .stat{background:var(--card);border-radius:14px;padding:14px 16px;border:2px solid transparent;text-align:left;color:inherit}
   .stat.on{border-color:var(--ink)}
   .stat .n{font-size:28px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -49,6 +49,12 @@
   .pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;white-space:nowrap}
   .pill.待審核{background:var(--pend-bg);color:var(--pend)} .pill.通過{background:var(--ok-bg);color:var(--ok)} .pill.拒絕{background:var(--no-bg);color:var(--no)}
   .pill.expired{background:var(--exp-bg);color:var(--exp)}
+  .pill.renew{background:#e0ecff;color:#1d4ed8} .pill.import{background:#f1f5f9;color:#475569}
+  .stat.rn .n{color:#1d4ed8}
+  .cmp{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 10px;font-size:13px;background:#f8fafc;border-radius:10px;padding:10px 12px;font-variant-numeric:tabular-nums}
+  .cmp .h{font-weight:700;color:var(--mute);font-size:12px}
+  .cmp .k{color:var(--mute)} .cmp .diff{color:#b91c1c;font-weight:700}
+  .noimg{color:#94a3b8;text-align:center;padding:24px;line-height:1.8}
   .warn{font-size:12px;background:#fff4dc;color:#92400e;padding:6px 10px;border-radius:8px}
   .note{font-size:12px;color:var(--mute);border-left:3px solid var(--line);padding-left:8px}
   .item .act{margin-top:auto;padding-top:4px}
@@ -75,7 +81,7 @@
   .close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:0;background:#fff;font-size:20px;line-height:1}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:14px;display:none;z-index:20}
   @media (max-width:760px){
-    .stats{grid-template-columns:repeat(2,1fr)}
+    .stats{grid-template-columns:repeat(3,1fr)}
     .modal{grid-template-columns:1fr}
     .modal .img{max-height:60vh}
   }
@@ -180,7 +186,9 @@
     fn === 'adminImage' ? { pw, fileId: a[0], part: a[1] } :
     fn === 'adminUpdate' ? { pw, id: a[0], status: a[1], note: a[2] } : { pw });
 
-  const isExpired = r => r.status === '通過' && r.expireDate && r.expireDate < TODAY;
+  const isMember = r => r.type !== 'renew';
+  const isExpired = r => isMember(r) && r.status === '通過' && r.expireDate && r.expireDate < TODAY;
+  const byId = id => rows.find(r => r.id === id);
 
   /* 登入 */
   $('loginForm').addEventListener('submit', async e => {
@@ -207,18 +215,25 @@
 
   /* 畫面 */
   function render() {
-    const cnt = { '待審核': 0, '通過': 0, '拒絕': 0, '已到期': 0, '全部': rows.length };
-    rows.forEach(r => { cnt[r.status] = (cnt[r.status] || 0) + 1; if (isExpired(r)) cnt['已到期']++; });
-    const defs = [['待審核','pend'],['通過','ok'],['拒絕','no'],['已到期','exp']];
-    $('stats').innerHTML = defs.map(([k, c]) =>
-      `<button class="stat ${c} ${filter===k?'on':''}" data-f="${k}"><div class="n">${cnt[k]}</div><div class="l">${k}</div></button>`).join('')
-      ;
+    const cnt = { '待審核': 0, '通過': 0, '拒絕': 0, '已到期': 0, '續訂': 0 };
+    rows.forEach(r => {
+      if (r.status === '待審核') cnt['待審核']++;
+      if (!isMember(r)) { cnt['續訂']++; return; }
+      if (r.status !== '待審核') cnt[r.status] = (cnt[r.status] || 0) + 1;
+      if (isExpired(r)) cnt['已到期']++;
+    });
+    const defs = [['待審核','pend','待審核'],['通過','ok','成員・通過'],['拒絕','no','成員・拒絕'],['已到期','exp','成員・已到期'],['續訂','rn','續訂紀錄']];
+    $('stats').innerHTML = defs.map(([k, c, l]) =>
+      `<button class="stat ${c} ${filter===k?'on':''}" data-f="${k}"><div class="n">${cnt[k]}</div><div class="l">${l}</div></button>`).join('');
     document.querySelectorAll('.stat').forEach(b => b.onclick = () => { filter = filter === b.dataset.f ? '全部' : b.dataset.f; render(); });
 
     const q = $('q').value.trim().toLowerCase();
     const list = rows.filter(r => {
-      if (filter === '已到期' ? !isExpired(r) : filter !== '全部' && r.status !== filter) return false;
-      return !q || r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
+      if (filter === '待審核' && r.status !== '待審核') return false;
+      if (filter === '續訂' && isMember(r)) return false;
+      if (filter === '已到期' && !isExpired(r)) return false;
+      if ((filter === '通過' || filter === '拒絕') && (!isMember(r) || r.status !== filter)) return false;
+      return !q || [r.name, r.id, r.memberId].some(v => String(v || '').toLowerCase().includes(q));
     });
     // 待審核依提交時間由舊到新，方便依序處理
     if (filter === '待審核') list.reverse();
@@ -230,11 +245,22 @@
     document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openModal(b.dataset.open));
   }
 
+  function pills(r) {
+    return `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>`
+      + (!isMember(r) ? '<span class="pill renew">續訂</span>' : '')
+      + (r.source === '舊成員匯入' ? '<span class="pill import">舊成員匯入</span>' : '')
+      + (isExpired(r) ? '<span class="pill expired">已到期</span>' : '');
+  }
+
   function card(r) {
+    const sub = isMember(r) ? `${esc(r.id)}・${esc(r.submitted)}` : `${esc(r.id)}・成員 ${esc(r.memberId)}・${esc(r.submitted)}`;
+    const kv = isMember(r)
+      ? `<dt>付費日期</dt><dd>${esc(r.payDate || '—')}</dd><dt>到期日</dt><dd>${esc(r.expireDate || '—')}</dd><dt>加入社群</dt><dd>${esc(r.joinTime || '—')}</dd>`
+      : `<dt>原到期日</dt><dd>${esc(r.prevExpire || '—')}</dd><dt>新到期日</dt><dd>${esc(r.expireDate)}</dd><dt>付費日期</dt><dd>${esc(r.payDate)}</dd>`;
     return `<div class="item">
-      <div class="h"><div><div class="name">${esc(r.name)}</div><div class="id">${esc(r.id)}・${esc(r.submitted)}</div></div>
-        <div style="display:flex;gap:4px;flex-direction:column;align-items:flex-end"><span class="pill ${esc(r.status)}">${esc(r.status)}</span>${isExpired(r)?'<span class="pill expired">已到期</span>':''}</div></div>
-      <dl class="kv"><dt>付費日期</dt><dd>${esc(r.payDate)}</dd><dt>到期日</dt><dd>${esc(r.expireDate)}</dd><dt>加入社群</dt><dd>${esc(r.joinTime)}</dd></dl>
+      <div class="h"><div><div class="name">${esc(r.name)}</div><div class="id">${sub}</div></div>
+        <div style="display:flex;gap:4px;flex-direction:column;align-items:flex-end">${pills(r)}</div></div>
+      <dl class="kv">${kv}</dl>
       ${r.warn ? `<div class="warn">⚠ ${esc(r.warn)}</div>` : ''}
       ${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}
       <div class="act"><button data-open="${esc(r.id)}">${r.status === '待審核' ? '開始審核' : '查看'}</button></div>
@@ -243,16 +269,39 @@
 
   /* 審核視窗 */
   async function openModal(id) {
-    current = rows.find(r => r.id === id); if (!current) return;
+    current = byId(id); if (!current) return;
+    const oldCmp = $('mCmp'); if (oldCmp) oldCmp.remove();
     const r = current;
-    $('mPills').innerHTML = `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>${isExpired(r)?'<span class="pill expired">已到期</span>':''}<span class="id" style="font:12px ui-monospace,monospace;color:#6b7280">${esc(r.id)}</span>`;
+    $('mPills').innerHTML = pills(r) + `<span class="id" style="font:12px ui-monospace,monospace;color:#6b7280">${esc(r.id)}</span>`;
     $('mName').textContent = r.name;
-    $('mKv').innerHTML = `<dt>付費日期</dt><dd>${esc(r.payDate)}</dd><dt>到期日</dt><dd>${esc(r.expireDate)}</dd><dt>加入社群</dt><dd>${esc(r.joinTime)}</dd><dt>提交時間</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}`;
+    if (isMember(r)) {
+      $('mKv').innerHTML = `<dt>付費日期</dt><dd>${esc(r.payDate || '—')}</dd><dt>到期日</dt><dd>${esc(r.expireDate || '—')}</dd><dt>加入社群</dt><dd>${esc(r.joinTime || '—')}</dd><dt>${r.source === '舊成員匯入' ? '匯入時間' : '提交時間'}</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}`;
+      const renews = rows.filter(x => !isMember(x) && x.memberId === r.id);
+      if (renews.length) $('mKv').innerHTML += `<dt>續訂紀錄</dt><dd>${renews.map(x => `${esc(x.id)}（${esc(x.status)}）`).join('、')}</dd>`;
+    } else {
+      const m = r.member || {};
+      const d = (a, b) => a && b && a !== b ? ' class="diff"' : '';
+      $('mKv').innerHTML = `<dt>成員編號</dt><dd>${esc(r.memberId)}${r.member ? '' : '（查無此成員）'}</dd><dt>提交時間</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}`;
+      $('mKv').insertAdjacentHTML('afterend', `<div class="cmp" id="mCmp">
+        <div class="h"></div><div class="h">成員原紀錄</div><div class="h">這次續訂</div>
+        <div class="k">社群名字</div><div>${esc(m.name || '—')}</div><div${d(m.name, r.name)}>${esc(r.name)}</div>
+        <div class="k">付費日期</div><div>${esc(m.payDate || '—')}</div><div>${esc(r.payDate)}</div>
+        <div class="k">到期日</div><div>${esc(r.status === '通過' ? r.prevExpire : (m.expireDate || '—'))}</div><div>${esc(r.expireDate)}</div>
+        <div class="k">成員狀態</div><div>${esc(m.status || '—')}</div><div></div>
+        <div class="k">來源</div><div>${esc(m.source || '—')}</div><div></div>
+      </div>`);
+    }
     $('mWarn').innerHTML = r.warn ? `<div class="warn">⚠ ${esc(r.warn)}</div>` : '';
     $('mNote').value = r.note || '';
+    document.querySelector('.a-ok').textContent = isMember(r) ? '通過' : '通過（更新到期日）';
     $('mask').style.display = 'block'; document.body.style.overflow = 'hidden';
 
     const box = $('mImg');
+    if (!r.fileId) {
+      box.innerHTML = `<div class="noimg">${r.source === '舊成員匯入' ? '舊成員匯入資料<br>沒有付費截圖' : '沒有截圖'}${
+        isMember(r) && rows.some(x => !isMember(x) && x.memberId === r.id) ? '<br>可到「續訂紀錄」查看續訂截圖' : ''}</div>`;
+      return;
+    }
     if (imgCache[r.fileId]) return showImg(imgCache[r.fileId]);
     box.innerHTML = '<div class="loading">載入截圖中…</div>';
     try {
@@ -285,8 +334,9 @@
     document.querySelectorAll('.acts button').forEach(x => x.disabled = true);
     try {
       const upd = await call('adminUpdate', PW, id, status, $('mNote').value.trim());
-      rows = rows.map(r => r.id === id ? upd : r);
-      toast(`${upd.name}：${status}`);
+      const map = {}; upd.forEach(u => map[u.id] = u);
+      rows = rows.map(r => map[r.id] || r);
+      toast(`${upd[0].name}：${status}${upd[0].type === 'renew' && status === '通過' ? '，已更新到期日' : ''}`);
       // 待審核模式下自動跳到下一筆
       const next = filter === '待審核' && wasPending
         ? rows.slice().reverse().find(r => r.status === '待審核' && r.id !== id) : null;
