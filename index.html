@@ -18,7 +18,7 @@
   .howto b{display:block;margin-bottom:4px}
   .howto ol{margin:0;padding-left:20px}
   label.f{display:block;font-weight:600;font-size:15px;margin:18px 0 6px}
-  #form > label.f:first-child,#form > div:first-child > label.f:first-child{margin-top:0}
+  #form > label.f:first-child,#form > div:first-child > label.f:first-child,#statusView > label.f:first-child{margin-top:0}
   label.f small{font-weight:400;color:var(--mute);margin-left:4px}
   .req{color:var(--err)}
   input[type=text],input[type=date],input[type=datetime-local]{width:100%;font:inherit;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:inherit;appearance:none;-webkit-appearance:none;min-height:48px}
@@ -45,10 +45,22 @@
   .done .ok{width:64px;height:64px;border-radius:50%;background:#e8f9ef;color:var(--brand-d);display:grid;place-items:center;margin:0 auto 12px;font-size:32px}
   .done .id{display:inline-block;font:700 28px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;background:#f1f5f9;padding:12px 20px;border-radius:10px;margin:12px 0}
   .done p{color:var(--mute);margin:6px 0}
-  .tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#e5e7eb;border-radius:12px;padding:4px;margin-bottom:16px}
+  .tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;background:#e5e7eb;border-radius:12px;padding:4px;margin-bottom:16px}
   .tabs button{border:0;background:none;border-radius:9px;padding:10px;font:600 15px/1.2 inherit;font-family:inherit;color:var(--mute);cursor:pointer}
   .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
   .only-renew{display:none}
+  .only-status{display:none}
+  body.status .only-status{display:block}
+  body.status .hide-status{display:none}
+  .st{margin-top:16px;border-radius:12px;padding:16px;border:1px solid var(--line)}
+  .st h3{margin:0 0 8px;font-size:17px;display:flex;align-items:center;gap:8px}
+  .st .pill{font-size:13px;padding:3px 10px;border-radius:99px;font-weight:600}
+  .st.p .pill{background:#fff4dc;color:#b45309} .st.ok .pill{background:#e7f6ec;color:#15803d} .st.no .pill{background:#fdecec;color:#dc2626}
+  .st.no{border-color:#fecaca;background:#fffafa}
+  .st dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px}
+  .st dt{color:var(--mute)} .st dd{margin:0}
+  .st .reason{margin-top:10px;background:#fdecec;color:#991b1b;border-radius:8px;padding:10px 12px;font-size:14px}
+  .st .next{margin-top:10px;font-size:14px;color:var(--mute)}
   body.renew .only-renew{display:block}
   body.renew .only-new{display:none}
   .forgot{background:none;border:0;padding:0;margin-top:6px;color:#2563eb;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
@@ -87,6 +99,7 @@
     <div class="tabs" role="tablist">
       <button type="button" class="on" data-mode="new">新成員申請</button>
       <button type="button" data-mode="renew">舊成員續訂</button>
+      <button type="button" data-mode="status">查詢結果</button>
     </div>
 
     <div class="howto only-renew" style="background:#eef6ff">
@@ -94,7 +107,17 @@
       已經是社群成員、泡泡續訂後，請輸入你的<strong>成員編號</strong>（例如 M012）並上傳新的付費截圖。忘記編號可以用下方的「忘記編號」查詢。
     </div>
 
-    <div class="howto">
+    <div class="card only-status" id="statusView">
+      <label class="f" for="stId">成員編號 <span class="req">*</span></label>
+      <input type="text" id="stId" maxlength="10" autocomplete="off" placeholder="例：M012" style="text-transform:uppercase;font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em">
+      <label class="f" for="stName">社群名字 <span class="req">*</span><small>申請時填寫的名字</small></label>
+      <input type="text" id="stName" maxlength="50" autocomplete="off" placeholder="例：小星星">
+      <button class="btn" id="stBtn" type="button">查詢審核結果</button>
+      <div class="err" id="stErr"></div>
+      <div id="stResult"></div>
+    </div>
+
+    <div class="howto hide-status">
       <b>付費截圖怎麼準備？</b>
       <ol>
         <li>在泡泡 App 截下「訂閱／付費成功」畫面（需看得到日期）</li>
@@ -103,7 +126,7 @@
       </ol>
     </div>
 
-    <form class="card" id="form" novalidate>
+    <form class="card hide-status" id="form" novalidate>
       <div class="only-renew">
         <label class="f" for="memberId">成員編號 <span class="req">*</span><small>管理員提供的編號</small></label>
         <input type="text" id="memberId" maxlength="10" autocomplete="off" placeholder="例：M012">
@@ -161,6 +184,7 @@
     <p id="doneLabel">你的成員編號</p>
     <div class="id" id="doneId">—</div>
     <p id="doneHint">請記下這個編號，之後續訂時需要用到。</p>
+    <p>審核結果可以回到本頁的「查詢結果」查看。</p>
     <div class="howto" id="renameTip" style="text-align:left;margin-top:16px">
       <b>📌 請把 LINE 社群暱稱加上編號</b>
       例如：<strong id="renameEx">M0001 小星星</strong><br>管理員會用編號管理成員，沒有加上編號可能會被移出社群。
@@ -233,10 +257,44 @@
     mode = b.dataset.mode;
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
     document.body.classList.toggle('renew', mode === 'renew');
+    document.body.classList.toggle('status', mode === 'status');
     $('submit').textContent = mode === 'renew' ? '送出續訂' : '送出驗證';
     hideErr();
   });
   if (/[?&]renew\b/.test(location.search)) document.querySelector('[data-mode=renew]').click();
+  if (/[?&]status\b/.test(location.search)) document.querySelector('[data-mode=status]').click();
+
+  // 查詢審核結果
+  $('stBtn').onclick = doStatus;
+  ['stId', 'stName'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doStatus(); } }));
+  async function doStatus() {
+    const id = $('stId').value.trim().toUpperCase(), name = $('stName').value.trim();
+    const err = $('stErr'); err.style.display = 'none'; $('stResult').innerHTML = '';
+    if (!/^M\d{1,6}$/.test(id)) { err.textContent = '請輸入正確的成員編號，例如 M012'; err.style.display = 'block'; return; }
+    if (!name) { err.textContent = '請輸入社群名字'; err.style.display = 'block'; return; }
+    const btn = $('stBtn'); btn.disabled = true; btn.textContent = '查詢中…';
+    try {
+      const r = await api('status', { memberId: id, name });
+      $('stResult').innerHTML = statusCard(r);
+    } catch (e) { err.textContent = e.message; err.style.display = 'block'; }
+    btn.disabled = false; btn.textContent = '查詢審核結果';
+  }
+  function statusCard(r) {
+    const cls = s => s === '通過' ? 'ok' : s === '拒絕' ? 'no' : 'p';
+    const retry = '<div class="next">請確認截圖與資料後重新送出，或點下方「LINE 聯繫專人服務」詢問。</div>';
+    const reason = t => `<div class="reason">拒絕原因：${escH(t || '未填寫原因，請聯繫客服詢問')}</div>`;
+    let html = `<div class="st ${cls(r.status)}"><h3>${escH(r.id)} ${escH(r.name)} <span class="pill">${r.status === '待審核' ? '審核中' : escH(r.status)}</span></h3>
+      <dl><dt>申請狀態</dt><dd>${r.status === '待審核' ? '管理員審核中，請耐心等候' : r.status === '通過' ? '已通過' : '未通過'}</dd>
+      ${r.status === '通過' && r.expireDate ? `<dt>會員到期日</dt><dd>${escH(r.expireDate)}</dd>` : ''}</dl>
+      ${r.status === '拒絕' ? reason(r.reason) + '<div class="next">請到「新成員申請」重新送出，或點下方「LINE 聯繫專人服務」詢問。</div>' : ''}</div>`;
+    if (r.renewal) {
+      const n = r.renewal;
+      html += `<div class="st ${cls(n.status)}"><h3>最近一次續訂 <span class="pill">${n.status === '待審核' ? '審核中' : escH(n.status)}</span></h3>
+        <dl><dt>送出時間</dt><dd>${escH(n.submitted)}</dd><dt>續訂到期日</dt><dd>${escH(n.expireDate)}</dd></dl>
+        ${n.status === '拒絕' ? reason(n.reason) + retry : ''}</div>`;
+    }
+    return html;
+  }
 
   // 忘記編號查詢
   const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
