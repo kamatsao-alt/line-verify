@@ -200,21 +200,30 @@
   /* ===== 請把下面網址換成你的 Apps Script 部署網址（結尾 /exec） ===== */
   const API_URL = 'https://script.google.com/macros/s/AKfycby0IsoW876u1UEtO2lL2AhUz2n7tlQOuwK1sbZjUnymgjcI_lK-kW9b80c1soer0gJfFQ/exec';
 
-  // 以 text/plain 送出可避免跨網域預檢；不帶 Google 登入狀態，所以多帳號也能用
-  async function api(action, payload) {
-    let res;
+  // 讀取類操作遇到 Google 暫時錯誤會自動重試；寫入類操作不重試，避免重複送出
+  const SAFE_RETRY = ['adminList', 'adminImage', 'lookup', 'status'];
+  async function api(action, payload, attempt = 0) {
+    const retry = SAFE_RETRY.includes(action) && attempt < 2;
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    let res, text;
     try {
       res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(Object.assign({ action }, payload)),
       });
-    } catch (e) { throw new Error('連線失敗，請檢查網路後再試'); }
-    const text = await res.text();
+      text = await res.text();
+    } catch (e) {
+      if (retry) { await wait(1200 * (attempt + 1)); return api(action, payload, attempt + 1); }
+      throw new Error('連線失敗，請檢查網路後再試');
+    }
     let json;
     try { json = JSON.parse(text); } catch (e) {
-      const msg = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
-      throw new Error('伺服器回應異常（HTTP ' + res.status + '）：' + (msg || '空白回應'));
+      if (retry) { await wait(1200 * (attempt + 1)); return api(action, payload, attempt + 1); }
+      console.warn('Google 回應內容：', res.status, text.slice(0, 500));
+      throw new Error(action === 'submit'
+        ? 'Google 伺服器暫時沒有回應。資料可能已經送出，請先到「查詢結果」確認，查不到再重新送出。'
+        : 'Google 伺服器暫時沒有回應，請稍等幾秒再試一次。');
     }
     if (!json.ok) throw new Error(String(json.error || '發生錯誤').replace(/^Error:\s*/, ''));
     return json.result;
