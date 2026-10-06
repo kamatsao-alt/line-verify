@@ -99,7 +99,8 @@
   <form class="login-card" id="loginForm">
     <h1>審核後台</h1>
     <p>泡泡會員社群・入群驗證</p>
-    <input class="inp" type="password" id="pw" placeholder="管理員密碼" autocomplete="current-password">
+    <input class="inp" type="text" id="user" placeholder="帳號" autocomplete="username" autocapitalize="off" spellcheck="false" style="margin-bottom:10px">
+    <input class="inp" type="password" id="pw" placeholder="密碼" autocomplete="current-password">
     <button class="btn full" id="loginBtn">登入</button>
     <div class="msg" id="loginMsg"></div>
   </form>
@@ -111,7 +112,11 @@
       <h1>入群審核</h1>
       <div class="sub" id="updated"></div>
     </div>
-    <button class="ghost" id="refresh">↻ 重新整理</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="sub" id="whoami"></span>
+      <button class="ghost" id="refresh">↻ 重新整理</button>
+      <button class="ghost" id="logout">登出</button>
+    </div>
   </div>
 
   <div class="stats" id="stats"></div>
@@ -197,14 +202,14 @@
   const d0 = new Date();
   const TODAY = `${d0.getFullYear()}-${pad(d0.getMonth()+1)}-${pad(d0.getDate())}`;
 
-  let PW = '', rows = [], filter = '待審核', current = null;
+  let PW = '', USER = '', rows = [], filter = '待審核', current = null;
   const imgCache = {};
 
-  const call = (fn, pw, ...a) => api(fn,
-    fn === 'adminImage' ? { pw, fileId: a[0], part: a[1] } :
-    fn === 'adminUpdate' ? { pw, id: a[0], status: a[1], note: a[2] } :
-    fn === 'adminDelete' ? { pw, id: a[0] } :
-    fn === 'adminPurge' ? { pw, kind: a[0] } : { pw });
+  const call = (fn, pw, ...a) => api(fn, Object.assign({ pw, user: USER },
+    fn === 'adminImage' ? { fileId: a[0], part: a[1] } :
+    fn === 'adminUpdate' ? { id: a[0], status: a[1], note: a[2] } :
+    fn === 'adminDelete' ? { id: a[0] } :
+    fn === 'adminPurge' ? { kind: a[0] } : {}));
 
   const isMember = r => r.type !== 'renew';
   const isExpired = r => isMember(r) && r.status === '通過' && r.expireDate && r.expireDate < TODAY;
@@ -214,12 +219,18 @@
   let currentList = [];
 
   /* 登入 */
+  try { $('user').value = localStorage.getItem('lv_admin_user') || ''; } catch (e) {}
+  if ($('user').value) $('pw').focus();
+  $('logout').addEventListener('click', () => { PW = ''; location.reload(); });
   $('loginForm').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = $('loginBtn'); btn.disabled = true; $('loginMsg').textContent = '';
     try {
-      PW = $('pw').value;
-      rows = await call('adminList', PW);
+      PW = $('pw').value; USER = $('user').value.trim();
+      const res = await call('adminLogin', PW);
+      rows = res.rows;
+      $('whoami').textContent = `登入者：${res.name}`;
+      try { localStorage.setItem('lv_admin_user', USER); } catch (e) {}
       $('login').style.display = 'none'; $('app').style.display = 'block';
       stamp(); render();
     } catch (err) { $('loginMsg').textContent = err.message; }
@@ -353,6 +364,7 @@
       <dl class="kv">${kv}</dl>
       ${r.warn ? `<div class="warn">⚠ ${esc(r.warn)}</div>` : ''}
       ${r.note ? `<div class="note">${esc(r.note)}</div>` : ''}
+      ${r.reviewer && r.status !== '待審核' ? `<div class="id">審核人：${esc(r.reviewer)}</div>` : ''}
       <div class="act"><button data-open="${esc(r.id)}">${r.status === '待審核' ? '開始審核' : '查看'}</button></div>
     </div>`;
   }
@@ -365,13 +377,13 @@
     $('mPills').innerHTML = pills(r) + `<span class="id" style="font:12px ui-monospace,monospace;color:#6b7280">${esc(r.id)}</span>`;
     $('mName').textContent = r.name;
     if (isMember(r)) {
-      $('mKv').innerHTML = `<dt>付費日期</dt><dd>${esc(r.payDate || '—')}</dd><dt>到期日</dt><dd>${esc(r.expireDate || '—')}</dd><dt>加入社群</dt><dd>${esc(r.joinTime || '—')}</dd><dt>${r.source === '舊成員匯入' ? '匯入時間' : '提交時間'}</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}`;
+      $('mKv').innerHTML = `<dt>付費日期</dt><dd>${esc(r.payDate || '—')}</dd><dt>到期日</dt><dd>${esc(r.expireDate || '—')}</dd><dt>加入社群</dt><dd>${esc(r.joinTime || '—')}</dd><dt>${r.source === '舊成員匯入' ? '匯入時間' : '提交時間'}</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}${r.reviewer?`<dt>審核人</dt><dd>${esc(r.reviewer)}</dd>`:''}`;
       const renews = rows.filter(x => !isMember(x) && x.memberId === r.id);
       if (renews.length) $('mKv').innerHTML += `<dt>續訂紀錄</dt><dd>${renews.map(x => `${esc(x.id)}（${esc(x.status)}）`).join('、')}</dd>`;
     } else {
       const m = r.member || {};
       const d = (a, b) => a && b && nameKey(a) !== nameKey(b) ? ' class="diff"' : '';
-      $('mKv').innerHTML = `<dt>成員編號</dt><dd>${esc(r.memberId)}${r.member ? '' : '（查無此成員）'}</dd><dt>提交時間</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}`;
+      $('mKv').innerHTML = `<dt>成員編號</dt><dd>${esc(r.memberId)}${r.member ? '' : '（查無此成員）'}</dd><dt>提交時間</dt><dd>${esc(r.submitted)}</dd>${r.reviewedAt?`<dt>審核時間</dt><dd>${esc(r.reviewedAt)}</dd>`:''}${r.reviewer?`<dt>審核人</dt><dd>${esc(r.reviewer)}</dd>`:''}`;
       $('mKv').insertAdjacentHTML('afterend', `<div class="cmp" id="mCmp">
         <div class="h"></div><div class="h">成員原紀錄</div><div class="h">這次續訂</div>
         <div class="k">社群名字</div><div>${esc(m.name || '—')}</div><div${d(m.name, r.name)}>${esc(r.name)}</div>
