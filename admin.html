@@ -77,6 +77,9 @@
   .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .a-ok{background:var(--ok);color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700}
   .a-no{background:var(--no);color:#fff;border:0;border-radius:10px;padding:12px;font-weight:700}
+  .a-del{margin-top:4px;background:none;border:1px solid #fecaca;color:var(--no);border-radius:10px;padding:8px;font-size:13px}
+  .a-del:hover{background:#fef2f2}
+  .ghost.danger{color:var(--no);border-color:#fecaca}
   .a-reset{grid-column:1/-1;background:none;border:0;color:var(--mute);text-decoration:underline;padding:4px}
   .close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;border:0;background:#fff;font-size:20px;line-height:1}
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:99px;font-size:14px;display:none;z-index:20}
@@ -113,6 +116,7 @@
   <div class="bar">
     <input class="inp" id="q" placeholder="搜尋社群名字或編號…">
     <button class="ghost" id="copyList" title="複製目前列表的成員編號與名字">⧉ 複製編號清單</button>
+    <button class="ghost danger" id="purgeBtn" style="display:none">🗑 一鍵清空</button>
   </div>
 
   <div class="list" id="list"></div>
@@ -142,6 +146,7 @@
           <button class="a-no" data-s="拒絕">拒絕</button>
           <button class="a-reset" data-s="待審核">改回待審核</button>
         </div>
+        <button class="a-del" id="mDelete">刪除這筆資料</button>
       </div>
     </div>
     <button class="close" id="mClose" aria-label="關閉">×</button>
@@ -185,7 +190,9 @@
 
   const call = (fn, pw, ...a) => api(fn,
     fn === 'adminImage' ? { pw, fileId: a[0], part: a[1] } :
-    fn === 'adminUpdate' ? { pw, id: a[0], status: a[1], note: a[2] } : { pw });
+    fn === 'adminUpdate' ? { pw, id: a[0], status: a[1], note: a[2] } :
+    fn === 'adminDelete' ? { pw, id: a[0] } :
+    fn === 'adminPurge' ? { pw, kind: a[0] } : { pw });
 
   const isMember = r => r.type !== 'renew';
   const isExpired = r => isMember(r) && r.status === '通過' && r.expireDate && r.expireDate < TODAY;
@@ -216,6 +223,52 @@
   $('q').addEventListener('input', render);
 
   // 複製目前列表的「編號 名字」，方便在 LINE 社群搜尋並移除成員
+  // 刪除單筆
+  $('mDelete').addEventListener('click', async () => {
+    if (!current) return;
+    const r = current;
+    const renews = isMember(r) ? rows.filter(x => !isMember(x) && x.memberId === r.id).length : 0;
+    const msg = `確定要刪除 ${r.id}「${r.name}」嗎？\n${renews ? `這位成員的 ${renews} 筆續訂紀錄也會一起刪除。` : ''}`;
+    if (!confirm(msg)) return;
+    $('mDelete').disabled = true;
+    try {
+      const res = await call('adminDelete', PW, r.id);
+      const gone = new Set(res.deleted);
+      rows = rows.filter(x => !gone.has(x.id));
+      closeModal(); render();
+      toast(`已刪除 ${res.deleted.length} 筆`);
+    } catch (err) { toast(err.message); }
+    $('mDelete').disabled = false;
+  });
+
+  // 一鍵清空：只在「拒絕」與「已到期」列表顯示
+  const hasPendingRenew = id => rows.some(x => !isMember(x) && x.memberId === id && x.status === '待審核');
+  function purgeTargets() {
+    if (filter === '拒絕') return rows.filter(r => r.status === '拒絕');
+    if (filter === '已到期') return rows.filter(r => isExpired(r) && !hasPendingRenew(r.id));
+    return [];
+  }
+  $('purgeBtn').addEventListener('click', async () => {
+    const kind = filter === '拒絕' ? 'rejected' : filter === '已到期' ? 'expired' : '';
+    if (!kind) return;
+    const n = purgeTargets().length;
+    if (!n) return toast('目前沒有可清空的資料');
+    const keep = kind === 'expired' ? rows.filter(r => isExpired(r) && hasPendingRenew(r.id)).length : 0;
+    const msg = kind === 'rejected'
+      ? `確定要刪除全部 ${n} 筆「拒絕」的申請與續訂嗎？`
+      : `確定要刪除全部 ${n} 位已到期的成員嗎？\n他們的續訂紀錄也會一起刪除。` + (keep ? `\n（有 ${keep} 位已送出續訂、還在待審核，會保留）` : '');
+    if (!confirm(msg)) return;
+    $('purgeBtn').disabled = true;
+    try {
+      const res = await call('adminPurge', PW, kind);
+      const gone = new Set(res.deleted);
+      rows = rows.filter(x => !gone.has(x.id));
+      render();
+      toast(`已刪除 ${res.deleted.length} 筆`);
+    } catch (err) { toast(err.message); }
+    $('purgeBtn').disabled = false;
+  });
+
   $('copyList').addEventListener('click', async () => {
     const seen = new Set();
     const lines = currentList
@@ -260,6 +313,7 @@
     // 待審核依提交時間由舊到新，方便依序處理
     if (filter === '待審核') list.reverse();
     currentList = list;
+    $('purgeBtn').style.display = (filter === '拒絕' || filter === '已到期') ? '' : 'none';
 
     const label = filter === '全部' ? `全部 ${list.length} 筆（點上方數字可篩選）` : '';
     $('list').innerHTML = list.length ? list.map(card).join('') :
