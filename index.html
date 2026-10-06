@@ -84,7 +84,7 @@
 
     <div class="howto only-renew" style="background:#eef6ff">
       <b>續訂說明</b>
-      已經是社群成員、泡泡續訂後，請輸入你的<strong>成員編號</strong>（例如 M0012）並上傳新的付費截圖。忘記編號可以用下方的「忘記編號」查詢。
+      已經是社群成員、泡泡續訂後，請輸入你的<strong>成員編號</strong>（例如 M012）並上傳新的付費截圖。忘記編號可以用下方的「忘記編號」查詢。
     </div>
 
     <div class="howto">
@@ -99,7 +99,7 @@
     <form class="card" id="form" novalidate>
       <div class="only-renew">
         <label class="f" for="memberId">成員編號 <span class="req">*</span><small>管理員提供的編號</small></label>
-        <input type="text" id="memberId" maxlength="10" autocomplete="off" placeholder="例：M0012">
+        <input type="text" id="memberId" maxlength="10" autocomplete="off" placeholder="例：M012">
         <button type="button" class="forgot" id="forgotBtn">忘記編號？用社群名字查詢</button>
         <div class="lookup" id="lookup">
           <div class="lrow">
@@ -285,7 +285,7 @@
       image: imageData,
       website: $('website').value,
     };
-    if (mode === 'renew' && !/^M\d{1,6}$/.test(d.memberId)) return showErr('請輸入正確的成員編號，例如 M0012', 'memberId');
+    if (mode === 'renew' && !/^M\d{1,6}$/.test(d.memberId)) return showErr('請輸入正確的成員編號，例如 M012', 'memberId');
     if (!d.name) return showErr('請填寫社群名字', 'name');
     if (!d.payDate) return showErr('請填寫泡泡付費日期', 'payDate');
     if (!d.expireDate) return showErr('請填寫泡泡訂閱到期日', 'expireDate');
@@ -304,7 +304,7 @@
         if (mode === 'renew') {
           $('doneTitle').textContent = '已收到你的續訂資料';
           $('doneLabel').textContent = '成員編號';
-          $('doneHint').innerHTML = `續訂單號 ${res.id}<br>管理員審核後會更新你的會員到期日。`;
+          $('doneHint').textContent = '管理員審核後會更新你的會員到期日，之後續訂請繼續使用同一個成員編號。';
         }
         $('formView').style.display = 'none';
         $('doneView').style.display = 'block';
